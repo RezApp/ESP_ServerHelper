@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<link rel="stylesheet" type="text/css" href="setting.css">
+	<script type="text/javascript" src="setting.js"></script>
+	<title>Setting</title>
+</head>
+
+<body onload="OnLoad()">
+	<form action="config" method="post">
+		<h1>Access Point</h1>
+		
+		<h2>Name:</h2>
+		<input type="text" name="name">
+		<h2>SSID:</h2>
+		<input list="ssids" name="ssid">
+		<datalist id="ssids"></datalist>
+		<h2>Password:</h2>
+		<input name="pass" type="password">
+		<h2>IP:</h2>
+		<input type="text" name="ip">
+		<h2>Gateway:</h2>
+		<input type="text" name="gateway" value="192.168.1.1">
+		<h2>Subnet:</h2>
+		<input type="text" name="subnet" value="255.255.255.0">
+		<button>Submit</button>
+	</form>
+</body>
+
+</html>
