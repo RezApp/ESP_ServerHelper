@@ -12,13 +12,13 @@
 #include <FS.h>
 #include <ArduinoOTA.h>
 
-
 class ServerHelper
 {
-public:
+  public:
     String st;
     String content;
     int statusCode;
+    bool authMode;
 
     // Create an instance of the server
     // specify the port to listen on as an argument
@@ -27,12 +27,15 @@ public:
     WiFiServer TelnetServer;
     WiFiClient Telnet;
 
-    Stream* dbg_out;
+    Stream *dbg_out;
 
-    char* www_username;
-    char* www_password;
+    String www_username;
+    String www_password;
 
-    String coolerName;
+    String apSSID;
+    String apPASS;
+
+    String deviceName;
 
     //holds the current upload
     File fsUploadFile;
@@ -41,10 +44,12 @@ public:
     void (*apHandler)(void);
     void (*onStartUpdateHandler)(void);
 
-    ServerHelper() : server(80), TelnetServer(23) {
+    ServerHelper() : server(80), TelnetServer(23)
+    {
         dbg_out = &Telnet;
     }
-    ServerHelper(Stream* s) : server(80), TelnetServer(23) {
+    ServerHelper(Stream *s) : server(80), TelnetServer(23)
+    {
         dbg_out = s;
     }
 
@@ -54,12 +59,27 @@ public:
     void OTA_setup();
     void setupAP();
 
-    bool read_ssid_and_pass(String* esid, String* epass);
+    bool read_ssid_and_pass(String *essid, String *epass, int addr = 0);
+    void write_ssid_and_pass(String essid, String epass, int addr = 0);
+    
+    bool read_user_and_pass();
+    void write_user_and_pass(String user, String pass);
 
+    void read_device_name();
+    void write_device_name(String name);
+    
+    void set_ap_ssid_and_pass(String ssid, String pass);
+
+    bool read_ipv4(IPAddress *ip, IPAddress *gateway, IPAddress *subnet);
+    void write_ipv4(String ip, String gateway, String subnet);
+   
     bool testWifi(void);
     void launchWeb(int webtype);
 
     void listNetworks(void);
+
+    void active_auth_mode();
+    void deactive_auth_mode();
 
     String getContentType(String filename);
     bool handleFileRead(String path);
@@ -73,8 +93,9 @@ public:
 
     bool checkAuthentication();
 
-    int writeEEPROM(int addr, String str);
-    void readEEPROM(int addr, String* str, int len);
+    void clearEEPROM(int from = 0, int addr = 512);
+    int writeEEPROM(int addr, String str, int len = 0);
+    int readEEPROM(int addr, String *str, int len);
 
     bool read_and_config();
 
@@ -83,21 +104,19 @@ public:
     void on(const String &uri, ESP8266WebServer::THandlerFunction fn);
 };
 
-class MyRequestHandler : public RequestHandler {
-public:
+class MyRequestHandler : public RequestHandler
+{
+  public:
     //typedef bool (*MyHandlerFunction)(void);
     typedef std::function<bool(void)> AuthHandlerFunction;
 
     MyRequestHandler(AuthHandlerFunction auth, ESP8266WebServer::THandlerFunction fn, ESP8266WebServer::THandlerFunction ufn, const String &uri, HTTPMethod method)
-        : _auth(auth)
-        , _fn(fn)
-        , _ufn(ufn)
-        , _uri(uri)
-        , _method(method)
+        : _auth(auth), _fn(fn), _ufn(ufn), _uri(uri), _method(method)
     {
     }
 
-    bool canHandle(HTTPMethod requestMethod, String requestUri) override  {
+    bool canHandle(HTTPMethod requestMethod, String requestUri) override
+    {
         if (_method != HTTP_ANY && _method != requestMethod)
             return false;
 
@@ -107,30 +126,36 @@ public:
         return true;
     }
 
-    bool canUpload(String requestUri) override  {
+    bool canUpload(String requestUri) override
+    {
         if (!_ufn || !canHandle(HTTP_POST, requestUri))
             return false;
 
         return true;
     }
 
-    bool handle(ESP8266WebServer& server, HTTPMethod requestMethod, String requestUri) override {
-        (void) server;
+    bool handle(ESP8266WebServer &server, HTTPMethod requestMethod, String requestUri) override
+    {
+        (void)server;
         if (!canHandle(requestMethod, requestUri))
             return false;
-        if (_auth())_fn();
+        if (_auth())
+            _fn();
         return true;
     }
 
-    void upload(ESP8266WebServer& server, String requestUri, HTTPUpload& upload) override {
-        (void) server;
-        (void) upload;
-        if (canUpload(requestUri)) {
-            if (_auth())_ufn();
+    void upload(ESP8266WebServer &server, String requestUri, HTTPUpload &upload) override
+    {
+        (void)server;
+        (void)upload;
+        if (canUpload(requestUri))
+        {
+            if (_auth())
+                _ufn();
         }
     }
 
-protected:
+  protected:
     AuthHandlerFunction _auth;
     ESP8266WebServer::THandlerFunction _fn;
     ESP8266WebServer::THandlerFunction _ufn;
