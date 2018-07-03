@@ -12,6 +12,38 @@
 #include <FS.h>
 #include <ArduinoOTA.h>
 
+
+#define E_SSID_SIZE       32
+#define E_PASS_SIZE       32
+#define E_AUSER_SIZE      32
+#define E_APASS_SIZE      32
+#define E_IP_SIZE         16
+#define E_NAME_SIZE       32
+
+#define E_START_ADDR      0
+#define E_START_SIZE      32
+
+#define E_NAME_ADDR       E_START_ADDR   +   E_START_SIZE
+#define E_SSID_ADDR       E_NAME_ADDR    +   E_NAME_SIZE
+#define E_PASS_ADDR       E_SSID_ADDR    +   E_SSID_SIZE
+#define E_AUSER_ADDR      E_PASS_ADDR    +   E_PASS_SIZE
+#define E_APASS_ADDR      E_AUSER_ADDR   +   E_AUSER_SIZE
+#define E_IP_ADDR         E_APASS_ADDR   +   E_PASS_SIZE
+#define E_GATEWAY_ADDR    E_IP_ADDR      +   E_IP_SIZE
+#define E_SUBNET_ADDR     E_GATEWAY_ADDR +   E_IP_SIZE
+#define E_DNS_ADDR        E_SUBNET_ADDR  +   E_IP_SIZE
+
+#define E_END_ADDR        E_DNS_ADDR     +   E_IP_SIZE 
+
+#define E_IPV4_ADDR       E_IP_ADDR
+#define E_IPV4_SIZE       (E_IP_SIZE * 4)
+
+#define E_AUTH_ADDR       E_AUSER_ADDR
+#define E_AUTH_SIZE       (E_AUSER_SIZE + E_APASS_SIZE)
+
+#define E_AP_ADDR         E_SSID_ADDR
+#define E_AP_SIZE         (E_SSID_SIZE + E_PASS_SIZE)
+
 class ServerHelper
 {
   public:
@@ -59,8 +91,8 @@ class ServerHelper
     void OTA_setup();
     void setupAP();
 
-    bool read_ssid_and_pass(String *essid, String *epass, int addr = 0);
-    void write_ssid_and_pass(String essid, String epass, int addr = 0);
+    bool read_ssid_and_pass(String *essid, String *epass);
+    void write_ssid_and_pass(String essid, String epass);
     
     bool read_user_and_pass();
     void write_user_and_pass(String user, String pass);
@@ -70,8 +102,8 @@ class ServerHelper
     
     void set_ap_ssid_and_pass(String ssid, String pass);
 
-    bool read_ipv4(IPAddress *ip, IPAddress *gateway, IPAddress *subnet);
-    void write_ipv4(String ip, String gateway, String subnet);
+    bool read_ipv4(IPAddress *ip, IPAddress *gateway, IPAddress *subnet, IPAddress *dns);
+    void write_ipv4(String ip, String gateway, String subnet, String dns);
    
     bool testWifi(void);
     void launchWeb(int webtype);
@@ -93,7 +125,8 @@ class ServerHelper
 
     bool checkAuthentication();
 
-    void clearEEPROM(int from = 0, int addr = 512);
+    void clearEEPROM(int addr = 0, int len = 512);
+    
     int writeEEPROM(int addr, String str, int len = 0);
     int readEEPROM(int addr, String *str, int len);
 

@@ -1,17 +1,3 @@
-/**
- * EEPROM Config structure
- * #addr  #value    #size
- * 0      ssid      32
- * 32     pass      32
- * 64     username  32
- * 96     userpass  32
- * 128    ip        15
- * 144    gateway   15
- * 160    subnet    15   
- * 176    name      32
- * 208    END       0
- **/
-
 #include "ServerHelper.h"
 
 #define DBG_OUTPUT (*dbg_out)
@@ -81,18 +67,18 @@ void ServerHelper::OTA_setup()
   DBG_OUTPUT.println("OTA has begun");
 }
 
-void ServerHelper::clearEEPROM(int from, int to)
+void ServerHelper::clearEEPROM(int addr, int len)
 {
-  for (int i = from; i < to; ++i)
+  for (int i = addr; i < addr + len; ++i)
   {
     EEPROM.write(i, 0);
   }
   EEPROM.commit();
 
   DBG_OUTPUT.print("EEPROM: cleared from ");
-  DBG_OUTPUT.print(from);
+  DBG_OUTPUT.print(addr);
   DBG_OUTPUT.print(" to ");
-  DBG_OUTPUT.println(to);
+  DBG_OUTPUT.println(addr + len);
 }
 
 int ServerHelper::readEEPROM(int addr, String *str, int len)
@@ -107,11 +93,29 @@ int ServerHelper::readEEPROM(int addr, String *str, int len)
   return addr + len;
 }
 
+int ServerHelper::writeEEPROM(int addr, String str, int len)
+{
+  int outaddr = addr;
+  int max_len = str.length();
+
+  if (len > 0)
+    max_len = len;
+
+  for (int i = 0; i < max_len; ++i)
+  {
+    EEPROM.write(addr + i, str[i]);
+    DBG_OUTPUT.print(str[i]);
+    outaddr++;
+  }
+  DBG_OUTPUT.println();
+  return outaddr;
+}
+
 bool ServerHelper::read_and_config()
 {
-  IPAddress ip, gateway, subnet;
-  if (read_ipv4(&ip, &gateway, &subnet))
-    return WiFi.config(ip, gateway, subnet);
+  IPAddress ip, gateway, subnet, dns;
+  if (read_ipv4(&ip, &gateway, &subnet, &dns))
+    return WiFi.config(ip, gateway, subnet, dns);
 
   return false;
 }
@@ -143,18 +147,20 @@ void ServerHelper::setup(void (*handler)(void))
   if (read_user_and_pass())
   {
     DBG_OUTPUT.println("USER AND PASS DO EXIST");
-  }else{
+  }
+  else
+  {
     DBG_OUTPUT.println("USER AND PASS DON'T EXIST");
   }
 
   read_device_name();
 
   String essid, epass;
- 
+
   if (read_ssid_and_pass(&essid, &epass))
   {
     DBG_OUTPUT.println("SSID AND PASS DO EXIST");
-    
+
     if (read_and_config())
       DBG_OUTPUT.println("READ AND CONFIG OK");
     else
@@ -167,7 +173,9 @@ void ServerHelper::setup(void (*handler)(void))
       launchWeb(0);
       return;
     }
-  }else{
+  }
+  else
+  {
     DBG_OUTPUT.println("SSID AND PASS DON'T EXIST");
   }
 
@@ -402,24 +410,6 @@ void ServerHelper::handleFileDelete()
   path = String();
 }
 
-int ServerHelper::writeEEPROM(int addr, String str, int len)
-{
-  int outaddr = addr;
-  int max_len = str.length();
-
-  if (len > 0)
-    max_len = len;
-
-  for (int i = 0; i < max_len; ++i)
-  {
-    EEPROM.write(addr + i, str[i]);
-    DBG_OUTPUT.print(str[i]);
-    outaddr++;
-  }
-  DBG_OUTPUT.println();
-  return outaddr;
-}
-
 void ServerHelper::createWebServer(int webtype)
 {
 
@@ -455,6 +445,7 @@ void ServerHelper::createWebServer(int webtype)
     String v_ip = server.arg("ip");
     String v_gateway = server.arg("gateway");
     String v_subnet = server.arg("subnet");
+    String v_dns = server.arg("dns");
 
     String v_name = server.arg("name");
 
@@ -478,8 +469,10 @@ void ServerHelper::createWebServer(int webtype)
         v_gateway = "192.168.1.1";
       if (v_subnet.length() == 0)
         v_subnet = "255.255.255.0";
+      if (v_dns.length() == 0)
+        v_dns = "8.8.8.8";
 
-      write_ipv4(v_ip, v_gateway, v_subnet);
+      write_ipv4(v_ip, v_gateway, v_subnet, v_dns);
       result |= ConfigMode::IPV4;
     }
 
@@ -549,16 +542,15 @@ void ServerHelper::on(const String &uri, ESP8266WebServer::THandlerFunction hand
   on(uri, HTTP_ANY, handler);
 }
 
-bool ServerHelper::read_ssid_and_pass(String *essid, String *epass, int addr)
+bool ServerHelper::read_ssid_and_pass(String *essid, String *epass)
 {
-  int cur_addr = addr;
   // read eeprom for ssid and pass
   DBG_OUTPUT.println();
   DBG_OUTPUT.println("> EEPROM: READ");
   DBG_OUTPUT.print("SSID:\t");
-  cur_addr = readEEPROM(cur_addr, essid, 32);
+  readEEPROM(E_SSID_ADDR, essid, E_SSID_SIZE);
   DBG_OUTPUT.print("PASS:\t");
-  cur_addr = readEEPROM(cur_addr, epass, 32);
+  readEEPROM(E_PASS_ADDR, epass, E_PASS_SIZE);
   DBG_OUTPUT.println();
 
   if (essid->c_str()[0] != 0 && epass->c_str()[0] != 0)
@@ -568,51 +560,55 @@ bool ServerHelper::read_ssid_and_pass(String *essid, String *epass, int addr)
   return false;
 }
 
-void ServerHelper::write_ssid_and_pass(String ssid, String pass, int addr)
+void ServerHelper::write_ssid_and_pass(String ssid, String pass)
 {
-  clearEEPROM(addr, addr + 64);
+  clearEEPROM(E_AP_ADDR, E_AP_SIZE);
 
   DBG_OUTPUT.println();
   DBG_OUTPUT.println("> EEPROM: WRITE");
   DBG_OUTPUT.print("SSID:\t");
-  writeEEPROM(addr, ssid);
+  writeEEPROM(E_SSID_ADDR, ssid, E_SSID_SIZE);
   DBG_OUTPUT.print("PASS:\t");
-  writeEEPROM(addr + 32, pass);
+  writeEEPROM(E_PASS_ADDR, pass, E_PASS_SIZE);
   DBG_OUTPUT.println();
 
   EEPROM.commit();
 }
 
-bool ServerHelper::read_ipv4(IPAddress *ip, IPAddress *gateway, IPAddress *subnet)
+bool ServerHelper::read_ipv4(IPAddress *ip, IPAddress *gateway, IPAddress *subnet, IPAddress *dns)
 {
-  String s_ip, s_gateway, s_subnet;
+  String s_ip, s_gateway, s_subnet, s_dns;
 
   DBG_OUTPUT.println();
   DBG_OUTPUT.println("> EEPROM: READ");
   DBG_OUTPUT.print("IP:\t\t");
-  readEEPROM(128, &s_ip, 15);
-  DBG_OUTPUT.print("GATEWAY:\t");
-  readEEPROM(144, &s_gateway, 15);
+  readEEPROM(E_IP_ADDR, &s_ip, E_IP_SIZE);
+  DBG_OUTPUT.print("GATEWAY:\t\t");
+  readEEPROM(E_GATEWAY_ADDR, &s_gateway, E_IP_SIZE);
   DBG_OUTPUT.print("SUBNET:\t\t");
-  readEEPROM(160, &s_subnet, 15);
+  readEEPROM(E_SUBNET_ADDR, &s_subnet, E_IP_SIZE);
+  DBG_OUTPUT.print("DNS:\t\t");
+  readEEPROM(E_DNS_ADDR, &s_dns, E_IP_SIZE);
   DBG_OUTPUT.println();
 
-  bool isOk = ip->fromString(s_ip) && gateway->fromString(s_gateway) && subnet->fromString(s_subnet);
+  bool isOk = ip->fromString(s_ip) && gateway->fromString(s_gateway) && subnet->fromString(s_subnet) && dns->fromString(s_dns);
   return isOk;
 }
 
-void ServerHelper::write_ipv4(String ip, String gateway, String subnet)
+void ServerHelper::write_ipv4(String ip, String gateway, String subnet, String dns)
 {
-  clearEEPROM(128, 175);
+  clearEEPROM(E_IPV4_ADDR, E_IPV4_SIZE);
 
   DBG_OUTPUT.println();
   DBG_OUTPUT.println("> EEPROM: WRITE");
   DBG_OUTPUT.print("IP:\t\t");
-  writeEEPROM(128, ip);
+  writeEEPROM(E_IP_ADDR, ip, E_IP_SIZE);
   DBG_OUTPUT.print("GATEWAY:\t");
-  writeEEPROM(144, gateway);
+  writeEEPROM(E_GATEWAY_ADDR, gateway, E_IP_SIZE);
   DBG_OUTPUT.print("SUBNET:\t\t");
-  writeEEPROM(160, subnet);
+  writeEEPROM(E_SUBNET_ADDR, subnet, E_IP_SIZE);
+  DBG_OUTPUT.print("DNS:\t\t");
+  writeEEPROM(E_DNS_ADDR, dns, E_IP_SIZE);
   DBG_OUTPUT.println();
 
   EEPROM.commit();
@@ -621,13 +617,13 @@ void ServerHelper::write_ipv4(String ip, String gateway, String subnet)
 bool ServerHelper::read_user_and_pass()
 {
   String user, pass;
-  
+
   DBG_OUTPUT.println();
   DBG_OUTPUT.println("> EEPROM: READ");
   DBG_OUTPUT.print("USER:\t");
-  readEEPROM(64, &user, 32);
+  readEEPROM(E_AUSER_ADDR, &user, E_AUSER_SIZE);
   DBG_OUTPUT.print("PASS:\t");
-  readEEPROM(96, &pass, 32);
+  readEEPROM(E_APASS_ADDR, &pass, E_APASS_SIZE);
   DBG_OUTPUT.println();
 
   bool isOk = (user.c_str()[0] && pass.c_str()[0]);
@@ -641,14 +637,14 @@ bool ServerHelper::read_user_and_pass()
 
 void ServerHelper::write_user_and_pass(String user, String pass)
 {
-  clearEEPROM(64, 128);
+  clearEEPROM(E_AUTH_ADDR, E_AUTH_SIZE);
 
   DBG_OUTPUT.println();
   DBG_OUTPUT.println("> EEPROM: WRITE");
   DBG_OUTPUT.print("USER:\t");
-  writeEEPROM(64, user);
+  writeEEPROM(E_AUSER_ADDR, user, E_AUSER_SIZE);
   DBG_OUTPUT.print("PASS:\t");
-  writeEEPROM(96, pass);
+  writeEEPROM(E_APASS_ADDR, pass, E_APASS_SIZE);
   DBG_OUTPUT.println();
 
   EEPROM.commit();
@@ -660,18 +656,17 @@ void ServerHelper::set_ap_ssid_and_pass(String ssid, String pass)
   apPASS = pass;
 }
 
-
 void ServerHelper::read_device_name()
 {
-  readEEPROM(176, &deviceName, 32);
+  readEEPROM(E_NAME_ADDR, &deviceName, E_NAME_SIZE);
 }
 
 void ServerHelper::write_device_name(String name)
 {
   deviceName = name;
-  clearEEPROM(176, 208);
-  if (name.length() > 0 && name.length() <= 32)
-    writeEEPROM(176, name);
+  clearEEPROM(E_NAME_ADDR, E_NAME_SIZE);
+  if (name.length() > 0 && name.length() <= E_NAME_SIZE)
+    writeEEPROM(E_NAME_ADDR, name, E_NAME_SIZE);
 
   EEPROM.commit();
 }
